@@ -5,6 +5,14 @@ export default function Image() {
   const [dragging, setDragging] = useState(false);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [oldPosition, setOldPosition] = useState({ x: 0, y: 0 });
+  const [moveCount, setMoveCount] = useState(0);
+
+  const [isResizing, setIsResizing] = useState(false);
+  const [isNResize, setIsNResize] = useState(false);
+  const [isEResize, setIsEResize] = useState(false);
+  const [resizeTop, setResizeTop] = useState(false);
+  const [resizeLeft, setResizeLeft] = useState(false);
+
   const { state, dispatch } = usePosition();
   const ref = useRef();
 
@@ -61,10 +69,20 @@ export default function Image() {
   const onMouseDown = (e) => {
     e.preventDefault();
     setDragging(true);
+    setMoveCount(1)
   };
 
   const onMouseMove = (e) => {
     if (!dragging || !ref.current) return;
+    if (isResizing) return;
+    if (moveCount === 1) {
+      setOldPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+      setMoveCount(2)
+      return;
+    }
     const oldX = oldPosition.x;
     const oldY = oldPosition.y;
 
@@ -121,6 +139,103 @@ export default function Image() {
     setDragging(false);
   };
 
+  const onResizeStart = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    setIsResizing(true);
+    setMoveCount(1);
+  }
+
+  const onResizeMove = (e) => {
+    if (!isResizing || !ref.current) return;
+    if (moveCount === 1) {
+      setOldPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+      setMoveCount(2)
+      return;
+    }
+
+    console.log("resizing");
+
+    const oldX = oldPosition.x;
+    const oldY = oldPosition.y;
+
+    const refWidth = ref.current.offsetWidth;
+    const refHeight = ref.current.offsetHeight;
+
+    let newWidth = 0;
+    let newHeight = 0;
+
+    let newTop = state.position.top;
+    let newLeft = state.position.left;
+
+    if (isNResize) {
+      if (resizeTop) {
+        if (e.clientY - oldY > 0) {
+          newTop = state.position.top + (e.clientY - oldY);
+          newHeight = state.height - (e.clientY - oldY);
+        } else {
+          newTop = state.position.top - (oldY - e.clientY);
+          newHeight = state.height + (oldY - e.clientY);
+        }
+      } else {
+        if (e.clientY - oldY > 0) {
+          newTop = state.position.top;
+          newHeight = state.height + (e.clientY - oldY);
+        } else {
+          newTop = state.position.top + (oldY - e.clientY);
+          newHeight = state.height - (oldY - e.clientY);
+        }
+      }
+    } else {
+      newHeight = state.height;
+    }
+
+    if (isEResize) {
+      if (resizeLeft) {
+        if (e.clientX - oldX > 0) {
+          newLeft = state.position.left + (e.clientX - oldX);
+          newWidth = state.width - (e.clientX - oldX);
+        } else {
+          newLeft = state.position.left - (oldX - e.clientX);
+          newWidth = state.width + (oldX - e.clientX);
+        }
+      } else {
+        if (e.clientX - oldX > 0) {
+          newLeft = state.position.left;
+          newWidth = state.width + (e.clientX - oldX);
+        } else {
+          newLeft = state.position.left + (oldX - e.clientX);
+          newWidth = state.width - (oldX - e.clientX);
+        }
+      }
+    } else {
+      newWidth = state.width;
+    }
+
+    dispatch({
+      type: "SET_POSITION",
+      payload: {
+        position: { top: newTop, left: newLeft },
+        width: newWidth,
+        height: newHeight,
+      },
+    })
+
+    setOldPosition({
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }
+
+  const onResizeEnd = () => {
+    setIsResizing(false);
+    setIsNResize(false);
+    setIsEResize(false);
+  }
+
   return (
     <div
       ref={ref}
@@ -166,12 +281,32 @@ export default function Image() {
                 outline: "1px solid #fff",
                 cursor: "move",
               }}
-              className="block w-full h-full overflow-hidden"
+              className="block w-full h-full overflow-hidden relative"
               onMouseDown={onMouseDown}
               onMouseMove={onMouseMove}
               onMouseUp={onMouseUp}
-              onMouseLeave={onMouseUp}
             >
+              <span
+                onMouseDown={(e) => {
+                  setIsNResize(true);
+                  setResizeTop(true);
+                  onResizeStart(e);
+                }}
+                onMouseMove={onResizeMove}
+                onMouseUp={onResizeEnd}
+                className="absolute top-0 left-0 w-full h-[4px] bg-border-color z-[3] cursor-n-resize"></span>
+              <span
+                onMouseDown={(e) => {
+                  setIsEResize(true);
+                  onResizeStart(e);
+                }}
+                onMouseMove={onResizeMove}
+                onMouseUp={onResizeEnd}
+                onMouseLeave={onResizeEnd}
+                className="absolute top-0 left-0 w-[2px] h-full bg-border-color z-[3]"></span>
+              <span className="absolute top-0 right-0 w-[2px] h-full bg-border-color z-[3]"></span>
+              <span className="absolute bottom-0 left-0 w-full h-[2px] bg-border-color z-[3]"></span>
+
               <img
                 src={state.file.preview}
                 alt="cropped image"
